@@ -3,7 +3,6 @@ pandas
 numpy
 scikit-learn
 scipy
-scikit-surprise
 nltk
 matplotlib
 seaborn
