@@ -7,7 +7,16 @@ import pandas as pd
 from scipy import sparse
 from sklearn.metrics.pairwise import cosine_similarity
 from functions import *
+import os
+import gdown
 
+FILE_ID = "19vF_vGJV-tLu09t0aHCN03Sg1ZxmvWIg"
+FILE_NAME = "movie_similarity_matrix.pkl"
+
+if not os.path.exists(FILE_NAME):
+    url = f"https://drive.google.com/uc?id={FILE_ID}"
+    gdown.download(url, FILE_NAME, quiet=False)
+    
 st.header('Personalized Movie Recommendations')
 
 #Data imports
