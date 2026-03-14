@@ -33,11 +33,21 @@ number = int(st.number_input('How many movies would you like to rate?', min_valu
 #Varible to assign unique key for every iteration in the for loop
 current_line_number = 0
 options = df_content['title'].values.tolist()
-for _ in range(number):
-    movie = st.selectbox('Movie title',key=str(current_line_number), options=options)
-    rating = st.select_slider('Rate the movie',options=[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5], key=str(current_line_number))
-    new_user_data.append((movie,rating))
-    current_line_number += 1
+for i in range(number):
+
+    movie = st.selectbox(
+        'Movie title',
+        key=f"movie_{i}",
+        options=options
+    )
+
+    rating = st.select_slider(
+        'Rate the movie',
+        options=[0.5,1,1.5,2,2.5,3,3.5,4,4.5,5],
+        key=f"rating_{i}"
+    )
+
+    new_user_data.append((movie, rating))
 
 if st.button('Get Recommendations'):
 
