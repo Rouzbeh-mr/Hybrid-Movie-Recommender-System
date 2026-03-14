@@ -104,7 +104,7 @@ if st.button('Get Recommendations'):
         for movie in user_movies:
             #Add similarity score for each movie with user_movie
             #Remove movies that the user has already seen
-            similar_movies = similar_movies.append(df_content_sim[movie].drop(user_watched_movies))
+            similar_movies = pd.concat([similar_movies, df_content_sim[movie].drop(user_watched_movies).to_frame().T])
         #Add the similarity score of each movie and select the movies with high scores
         content_rec = pd.DataFrame(similar_movies.sum()).reset_index().rename(columns={'index': 'title',
                         0: 'content_similarity'})
