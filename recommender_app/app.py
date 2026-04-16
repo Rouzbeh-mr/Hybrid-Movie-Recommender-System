@@ -158,8 +158,8 @@ if st.button('Get Recommendations'):
         #recommendations = pd.merge(df_content[['title','vote_average', 'vote_count']], top_scores[['title', 'similarity_score']], on='title')
         #recommendations.rename(columns={'title': 'Movie Title', 'vote_average' : 'TMDb Rating', 'similarity_score' : 'Similarity Score'}, inplace=True)
         #return recommendations.sort_values(by='Similarity Score', ascending=False)
-        recommendations = pd.merge(df_content[['title','genres','imdb_rating', 'tmdb_rating']], top_scores[['title','similarity_score']], on='title')
-        recommendations.rename(columns={'title':'Movie Title', 'imdb_rating': 'IMDb Rating', 'tmdb_rating':'TMDB rating', 'similarity_score':'Similarity Score'}, inplace=True)
+        recommendations = pd.merge(df_content[['title','genres','imdb_rating']], top_scores[['title','similarity_score']], on='title')
+        recommendations.rename(columns={'title':'Movie Title', 'imdb_rating': 'IMDb Rating', 'similarity_score':'Similarity Score'}, inplace=True)
         return recommendations.sort_values(by='Similarity Score', ascending=False)
 
     st.table(hybrid_recommender(new_userId))
