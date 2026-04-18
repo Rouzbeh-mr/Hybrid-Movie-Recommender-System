@@ -66,4 +66,8 @@ def hybrid_recommender(user):
     content_user_scores['similarity_score'] = (content_user_scores['content_similarity'] + content_user_scores['user_similarity']) / 2
     top_scores = content_user_scores.sort_values(by='similarity_score', ascending=False)[:10]
     recommendations = pd.merge(df_content[['title','vote_average', 'vote_count']], top_scores[['title', 'similarity_score']], on='title')
-    return recommendations.sort_values(by='similarity_score', ascending=False).reset_index(drop=True)
+    recommendations = recommendations.sort_values(by='Similarity Score', ascending=False).reset_index(drop=True)
+    recommendations.index += 1
+    recommendations.index.name = "Rank"
+
+    return recommendations
