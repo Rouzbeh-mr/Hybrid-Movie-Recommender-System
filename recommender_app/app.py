@@ -161,8 +161,9 @@ if st.button('Get Recommendations'):
         recommendations = pd.merge(df_content[['title','genres','imdb_rating']], top_scores[['title','similarity_score']], on='title')
         recommendations.rename(columns={'title':'Movie Title', 'imdb_rating': 'IMDb Rating', 'similarity_score':'Similarity Score'}, inplace=True)
         recommendations = recommendations.sort_values(by='Similarity Score', ascending=False).reset_index(drop=True)
-        recommendations.index += 1
-        recommendations.index.name = "Rank"
+        recommendations.insert(0, 'Rank', range(1, len(recommendations) + 1))
+        #recommendations.index += 1
+        #recommendations.index.name = "Rank"
 
         return recommendations
 
