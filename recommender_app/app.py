@@ -166,4 +166,4 @@ if st.button('Get Recommendations'):
 
         return recommendations
 
-    st.dataframe(hybrid_recommender(new_userId))
+    st.table(hybrid_recommender(new_userId))
