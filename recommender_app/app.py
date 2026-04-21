@@ -345,7 +345,7 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
         
         # If both are empty (shouldn't happen with fallbacks), return popular movies
         if content_df.empty and user_df.empty:
-            popular_movies = df_content.nlargest(10, 'imdb_rating')[['title', 'genres', 'imdb_rating']].copy()
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres', 'imdb_rating']].copy()
             popular_movies['Similarity Score'] = 0.5
             popular_movies.rename(columns={'title': 'Movie Title', 'imdb_rating': 'IMDb Rating'}, inplace=True)
             popular_movies.insert(0, 'Rank', range(1, len(popular_movies) + 1))
@@ -354,10 +354,10 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
         # If one is empty, use the other
         if content_df.empty:
             user_df['similarity_score'] = user_df['user_similarity']
-            top_scores = user_df.sort_values(by='similarity_score', ascending=False)[:10]
+            top_scores = user_df.sort_values(by='similarity_score', ascending=False)[:20]  # Changed to 20
         elif user_df.empty:
             content_df['similarity_score'] = content_df['content_similarity']
-            top_scores = content_df.sort_values(by='similarity_score', ascending=False)[:10]
+            top_scores = content_df.sort_values(by='similarity_score', ascending=False)[:20]  # Changed to 20
         else:
             # Merge both recommendation sources
             try:
@@ -371,15 +371,15 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
                                          user_df[['title', 'genres', 'similarity_score']]], 
                                          ignore_index=True)
                     combined = combined.drop_duplicates(subset=['title'])
-                    top_scores = combined.sort_values(by='similarity_score', ascending=False)[:10]
+                    top_scores = combined.sort_values(by='similarity_score', ascending=False)[:20]  # Changed to 20
                 else:
                     # Both scores are normalized to [0,1] before averaging
                     content_user_scores['similarity_score'] = (content_user_scores['content_similarity'] + content_user_scores['user_similarity']) / 2
-                    top_scores = content_user_scores.sort_values(by='similarity_score', ascending=False)[:10]
+                    top_scores = content_user_scores.sort_values(by='similarity_score', ascending=False)[:20]  # Changed to 20
             except Exception as e:
                 # Fallback to content-based only
                 content_df['similarity_score'] = content_df['content_similarity']
-                top_scores = content_df.sort_values(by='similarity_score', ascending=False)[:10]
+                top_scores = content_df.sort_values(by='similarity_score', ascending=False)[:20]  # Changed to 20
         
         # Merge with movie details
         recommendations = pd.merge(df_content[['title', 'genres', 'imdb_rating']], 
