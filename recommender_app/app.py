@@ -119,74 +119,88 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
     df_user_sim = pd.DataFrame(user_similarity, index=user_item.index, columns=user_item.index)
     
     def get_content_similar_movies(user):
-        #Current/target user
-        df_current_user = df_user[df_user['user_id'] == user]
+    #Current/target user
+    df_current_user = df_user[df_user['user_id'] == user]
 
-        #Movies watched by the current/target user
-        user_watched_movies = df_current_user['title'].values
-        
-        # If no movies watched, return empty
-        if len(user_watched_movies) == 0:
-            return pd.DataFrame(columns=['title', 'genres', 'content_similarity'])
+    #Movies watched by the current/target user
+    user_watched_movies = df_current_user['title'].values
+    
+    # If no movies watched, return empty
+    if len(user_watched_movies) == 0:
+        return pd.DataFrame(columns=['title', 'genres', 'content_similarity'])
 
-        #User's mean rating
-        user_mean_rating = df_current_user['rating'].mean()
+    #User's mean rating
+    user_mean_rating = df_current_user['rating'].mean()
 
-        #Filter the list of movies by like/dislike based on user's rating
-        user_movies = []
-        for movie in user_watched_movies:
-            if df_current_user[df_current_user['title'] == movie]['rating'].values >= user_mean_rating:
-                user_movies.append(movie)
+    #Filter the list of movies by like/dislike based on user's rating
+    user_movies = []
+    for movie in user_watched_movies:
+        # Get the rating for this specific movie and compare (fix the broadcasting issue)
+        movie_rating = df_current_user[df_current_user['title'] == movie]['rating'].values
         
-        # If no movies above mean rating, use all rated movies instead
-        if len(user_movies) == 0:
-            user_movies = user_watched_movies.tolist()
-            
-        #Create an empty dataframe to store movie recommendations
-        similar_movies = pd.DataFrame()
-        #Loop through each movie seen by the user
-        for movie in user_movies:
-            #Add similarity score for each movie with user_movie
-            #Remove movies that the user has already seen
-            if movie in df_content_sim.index:
-                try:
-                    similar_movies = pd.concat([similar_movies, df_content_sim[movie].drop(user_watched_movies, errors='ignore').to_frame().T])
-                except:
-                    # If dropping fails, just use all similar movies
-                    similar_movies = pd.concat([similar_movies, df_content_sim[movie].to_frame().T])
+        # Check if array is not empty and compare the first element
+        if len(movie_rating) > 0 and movie_rating[0] >= user_mean_rating:
+            user_movies.append(movie)
+    
+    # If no movies above mean rating, use all rated movies instead
+    if len(user_movies) == 0:
+        user_movies = user_watched_movies.tolist()
         
-        if similar_movies.empty:
-            # Return popular movies as fallback
-            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
-            popular_movies['content_similarity'] = 0.5
-            return popular_movies
+    #Create an empty dataframe to store movie recommendations
+    similar_movies = pd.DataFrame()
+    #Loop through each movie seen by the user
+    for movie in user_movies:
+        #Add similarity score for each movie with user_movie
+        #Remove movies that the user has already seen
+        if movie in df_content_sim.index:
+            try:
+                # Get similarity scores for this movie
+                movie_similarities = df_content_sim[movie]
+                
+                # Drop movies the user has already seen
+                movies_to_drop = [m for m in user_watched_movies if m in movie_similarities.index]
+                if movies_to_drop:
+                    movie_similarities = movie_similarities.drop(movies_to_drop, errors='ignore')
+                
+                # Add to dataframe
+                similar_movies = pd.concat([similar_movies, movie_similarities.to_frame().T])
+            except Exception as e:
+                # If dropping fails, just use all similar movies
+                similar_movies = pd.concat([similar_movies, df_content_sim[movie].to_frame().T])
+    
+    if similar_movies.empty:
+        # Return popular movies as fallback
+        popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
+        popular_movies['content_similarity'] = 0.5
+        return popular_movies
+    
+    #Add the similarity score of each movie
+    # Sum across all rows (movies rated by user)
+    content_rec = pd.DataFrame(similar_movies.sum()).reset_index().rename(columns={'index': 'title',
+                    0: 'content_similarity'})
+    
+    # Remove any NaN values
+    content_rec = content_rec.dropna(subset=['content_similarity'])
+    
+    if content_rec.empty:
+        popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
+        popular_movies['content_similarity'] = 0.5
+        return popular_movies
+    
+    # Apply min-max normalization
+    if len(content_rec) > 0 and content_rec['content_similarity'].max() != content_rec['content_similarity'].min():
+        content_rec['content_similarity'] = (content_rec['content_similarity'] - content_rec['content_similarity'].min()) / (content_rec['content_similarity'].max() - content_rec['content_similarity'].min())
+    elif len(content_rec) > 0:
+        content_rec['content_similarity'] = 0.5
+    
+    result = pd.merge(df_content[['title', 'genres']], content_rec, how='inner').sort_values(by='content_similarity', ascending=False)
+    
+    if result.empty:
+        popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
+        popular_movies['content_similarity'] = 0.5
+        return popular_movies
         
-        #Add the similarity score of each movie
-        content_rec = pd.DataFrame(similar_movies.sum()).reset_index().rename(columns={'index': 'title',
-                        0: 'content_similarity'})
-        
-        # Remove any NaN values
-        content_rec = content_rec.dropna(subset=['content_similarity'])
-        
-        if content_rec.empty:
-            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
-            popular_movies['content_similarity'] = 0.5
-            return popular_movies
-        
-        # Apply min-max normalization
-        if len(content_rec) > 0 and content_rec['content_similarity'].max() != content_rec['content_similarity'].min():
-            content_rec['content_similarity'] = (content_rec['content_similarity'] - content_rec['content_similarity'].min()) / (content_rec['content_similarity'].max() - content_rec['content_similarity'].min())
-        elif len(content_rec) > 0:
-            content_rec['content_similarity'] = 0.5
-        
-        result = pd.merge(df_content[['title', 'genres']], content_rec, how='inner').sort_values(by='content_similarity', ascending=False)
-        
-        if result.empty:
-            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
-            popular_movies['content_similarity'] = 0.5
-            return popular_movies
-            
-        return result
+    return result
 
     def get_user_similar_movies(user, similarity_threshold):
         #Extract similar users
