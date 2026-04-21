@@ -49,29 +49,39 @@ df_content = st.session_state.df_content
 df_user = st.session_state.df_user_current
 df_content_sim = st.session_state.df_content_sim
 
-# Search functionality
-st.sidebar.markdown("### 🔍 Search Movies")
-search_term = st.sidebar.text_input("Enter movie title:", key="search_box")
-if search_term:
-    # Search for movies containing the search term (case-insensitive)
-    search_results = df_content[df_content['title'].str.contains(search_term, case=False, na=False)]
+# Function to create searchable dropdown
+def searchable_dropdown(options, key, placeholder="Type to search..."):
+    # Create a text input for search
+    search_term = st.text_input("🔍 Search movies:", key=f"search_{key}", placeholder=placeholder)
     
-    if not search_results.empty:
-        st.sidebar.markdown("**Search Results:**")
-        for idx, row in search_results.head(10).iterrows():
-            st.sidebar.markdown(f"• {row['title']} (⭐ {row['imdb_rating']})")
+    # Filter options based on search term
+    if search_term:
+        filtered_options = [opt for opt in options if search_term.lower() in opt.lower()]
+        if not filtered_options:
+            filtered_options = options[:100]  # Show first 100 if no matches
     else:
-        st.sidebar.markdown("No movies found matching your search.")
+        filtered_options = options[:500]  # Show first 500 for performance
+    
+    # Create selectbox with filtered options
+    selected_movie = st.selectbox(
+        "Or select from dropdown:",
+        options=filtered_options,
+        key=f"select_{key}",
+        help="You can type in the search box above to find movies quickly"
+    )
+    
+    return selected_movie
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 About")
-st.sidebar.markdown("""
-This hybrid recommender combines:
-- **Content-based filtering** (movie similarities)
-- **Collaborative filtering** (user similarities)
-
-Get personalized movie recommendations based on your ratings!
-""")
+# Alternative: Using st.selectbox with built-in search (Streamlit 1.24+)
+def searchable_selectbox(options, key, label="Movie title"):
+    # For newer versions of Streamlit, selectbox has built-in search
+    # Just add a large number of options and it will be searchable
+    return st.selectbox(
+        label,
+        options=options,
+        key=key,
+        help="Type to search for a movie - the dropdown is searchable!"
+    )
 
 #Get data from the user
 if not st.session_state.recommendations_shown:
@@ -88,17 +98,23 @@ if not st.session_state.recommendations_shown:
     if 'user_ratings' not in st.session_state:
         st.session_state.user_ratings = []
     
+    st.info("💡 **Tip:** You can type directly in the dropdown box to search for movies!")
+    
     # Create columns for better layout
     for i in range(number):
+        st.markdown(f"**Movie {i+1}**")
         col1, col2 = st.columns([3, 1])
+        
         with col1:
-            # Use selectbox with search capability
+            # Method 1: Use selectbox with search capability (Streamlit 1.24+)
+            # This automatically makes the dropdown searchable
             movie = st.selectbox(
                 'Movie title',
                 key=f"movie_{i}",
                 options=options,
-                help="Type to search for a movie"
+                help="Start typing to search for a movie"
             )
+            
         with col2:
             rating = st.select_slider(
                 'Rating',
@@ -112,6 +128,8 @@ if not st.session_state.recommendations_shown:
             st.session_state.user_ratings.append((movie, rating))
         else:
             st.session_state.user_ratings[i] = (movie, rating)
+        
+        st.markdown("---")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
