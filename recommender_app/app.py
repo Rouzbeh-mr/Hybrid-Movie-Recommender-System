@@ -17,7 +17,15 @@ if not os.path.exists(FILE_NAME):
     url = f"https://drive.google.com/uc?id={FILE_ID}"
     gdown.download(url, FILE_NAME, quiet=False)
     
-st.header('Personalized Movie Recommendations')
+# Updated header with new title
+st.markdown("""
+    <div style='text-align: center;'>
+        <h1>🎬 Hybrid Movie Recommendation System</h1>
+        <p style='font-size: 16px; color: #666;'>Powered by Rouzbeh</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
 
 # Initialize session state
 if 'recommendations_shown' not in st.session_state:
@@ -41,28 +49,59 @@ df_content = st.session_state.df_content
 df_user = st.session_state.df_user_current
 df_content_sim = st.session_state.df_content_sim
 
+# Search functionality
+st.sidebar.markdown("### 🔍 Search Movies")
+search_term = st.sidebar.text_input("Enter movie title:", key="search_box")
+if search_term:
+    # Search for movies containing the search term (case-insensitive)
+    search_results = df_content[df_content['title'].str.contains(search_term, case=False, na=False)]
+    
+    if not search_results.empty:
+        st.sidebar.markdown("**Search Results:**")
+        for idx, row in search_results.head(10).iterrows():
+            st.sidebar.markdown(f"• {row['title']} (⭐ {row['imdb_rating']})")
+    else:
+        st.sidebar.markdown("No movies found matching your search.")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📊 About")
+st.sidebar.markdown("""
+This hybrid recommender combines:
+- **Content-based filtering** (movie similarities)
+- **Collaborative filtering** (user similarities)
+
+Get personalized movie recommendations based on your ratings!
+""")
+
 #Get data from the user
 if not st.session_state.recommendations_shown:
+    st.markdown("### 📝 Rate Some Movies")
+    st.markdown("Tell us what you think about these movies to get personalized recommendations:")
+    
     new_user_data = []
     number = int(st.number_input('How many movies would you like to rate?', min_value=3, value=3, step=1))
     
+    # Get all movie titles for selection
     options = df_content['title'].values.tolist()
     
     # Store ratings in session state
     if 'user_ratings' not in st.session_state:
         st.session_state.user_ratings = []
     
+    # Create columns for better layout
     for i in range(number):
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([3, 1])
         with col1:
+            # Use selectbox with search capability
             movie = st.selectbox(
                 'Movie title',
                 key=f"movie_{i}",
-                options=options
+                options=options,
+                help="Type to search for a movie"
             )
         with col2:
             rating = st.select_slider(
-                'Rate the movie',
+                'Rating',
                 options=[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5],
                 key=f"rating_{i}",
                 value=3.0
@@ -74,7 +113,11 @@ if not st.session_state.recommendations_shown:
         else:
             st.session_state.user_ratings[i] = (movie, rating)
     
-    if st.button('Get Recommendations'):
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        get_rec_button = st.button('🎯 Get Recommendations', use_container_width=True)
+    
+    if get_rec_button:
         # Use stored ratings
         new_user_data = st.session_state.user_ratings
         
@@ -334,15 +377,23 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
         
         return recommendations
     
-    # Display recommendations
+    # Display recommendations with better formatting
+    st.markdown("### 🎯 Your Personalized Recommendations")
     recommendations_df = hybrid_recommender(st.session_state.new_userId)
+    
+    # Add star rating visualization
     st.table(recommendations_df)
     
+    st.markdown("---")
+    st.markdown("<p style='text-align: center; font-size: 14px; color: #666;'>🎬 Powered by Hybrid Recommendation Engine | Built with Streamlit</p>", unsafe_allow_html=True)
+    
     # Add button to get new recommendations with different movies
-    if st.button('Start Over with New Ratings'):
-        # Clear session state to reset
-        for key in ['recommendations_shown', 'new_userId', 'user_ratings']:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.session_state.df_user_current = st.session_state.df_user_original.copy()
-        st.rerun()
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button('🔄 Start Over with New Ratings', use_container_width=True):
+            # Clear session state to reset
+            for key in ['recommendations_shown', 'new_userId', 'user_ratings']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.session_state.df_user_current = st.session_state.df_user_original.copy()
+            st.rerun()
