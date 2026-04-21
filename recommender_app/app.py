@@ -124,6 +124,10 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
 
         #Movies watched by the current/target user
         user_watched_movies = df_current_user['title'].values
+        
+        # If no movies watched, return empty
+        if len(user_watched_movies) == 0:
+            return pd.DataFrame(columns=['title', 'genres', 'content_similarity'])
 
         #User's mean rating
         user_mean_rating = df_current_user['rating'].mean()
@@ -133,6 +137,10 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
         for movie in user_watched_movies:
             if df_current_user[df_current_user['title'] == movie]['rating'].values >= user_mean_rating:
                 user_movies.append(movie)
+        
+        # If no movies above mean rating, use all rated movies instead
+        if len(user_movies) == 0:
+            user_movies = user_watched_movies.tolist()
             
         #Create an empty dataframe to store movie recommendations
         similar_movies = pd.DataFrame()
@@ -141,14 +149,29 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
             #Add similarity score for each movie with user_movie
             #Remove movies that the user has already seen
             if movie in df_content_sim.index:
-                similar_movies = pd.concat([similar_movies, df_content_sim[movie].drop(user_watched_movies, errors='ignore').to_frame().T])
+                try:
+                    similar_movies = pd.concat([similar_movies, df_content_sim[movie].drop(user_watched_movies, errors='ignore').to_frame().T])
+                except:
+                    # If dropping fails, just use all similar movies
+                    similar_movies = pd.concat([similar_movies, df_content_sim[movie].to_frame().T])
         
         if similar_movies.empty:
-            return pd.DataFrame(columns=['title', 'genres', 'content_similarity'])
+            # Return popular movies as fallback
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
+            popular_movies['content_similarity'] = 0.5
+            return popular_movies
         
         #Add the similarity score of each movie
         content_rec = pd.DataFrame(similar_movies.sum()).reset_index().rename(columns={'index': 'title',
                         0: 'content_similarity'})
+        
+        # Remove any NaN values
+        content_rec = content_rec.dropna(subset=['content_similarity'])
+        
+        if content_rec.empty:
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
+            popular_movies['content_similarity'] = 0.5
+            return popular_movies
         
         # Apply min-max normalization
         if len(content_rec) > 0 and content_rec['content_similarity'].max() != content_rec['content_similarity'].min():
@@ -156,14 +179,34 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
         elif len(content_rec) > 0:
             content_rec['content_similarity'] = 0.5
         
-        return pd.merge(df_content[['title', 'genres']], content_rec, how='inner').sort_values(by='content_similarity', ascending=False)
+        result = pd.merge(df_content[['title', 'genres']], content_rec, how='inner').sort_values(by='content_similarity', ascending=False)
+        
+        if result.empty:
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres']].copy()
+            popular_movies['content_similarity'] = 0.5
+            return popular_movies
+            
+        return result
 
     def get_user_similar_movies(user, similarity_threshold):
         #Extract similar users
+        if user not in df_user_sim.index:
+            # Fallback: return popular movies
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres', 'year']].copy()
+            popular_movies['user_similarity'] = 0.5
+            return popular_movies
+            
         similar_users = df_user_sim[df_user_sim[user] > similarity_threshold][user].sort_values(ascending=False)[1:]
         
+        # If no similar users found, lower the threshold
+        if similar_users.empty and similarity_threshold > 0:
+            similar_users = df_user_sim[df_user_sim[user] > 0][user].sort_values(ascending=False)[1:5]
+        
+        # If still no similar users, return popular movies
         if similar_users.empty:
-            return pd.DataFrame(columns=['title', 'genres', 'year', 'user_similarity'])
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres', 'year']].copy()
+            popular_movies['user_similarity'] = 0.5
+            return popular_movies
         
         #Extract movies watched by the target user
         target_user_movies = norm_user_item[norm_user_item.index == user].dropna(axis=1, how='all')
@@ -177,7 +220,11 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
                 similar_user_movies.drop(column, axis=1, inplace=True)
         
         if similar_user_movies.empty:
-            return pd.DataFrame(columns=['title', 'genres', 'year', 'user_similarity'])
+            # Return popular movies not watched by user
+            watched_movies = target_user_movies.columns.tolist()
+            popular_movies = df_content[~df_content['title'].isin(watched_movies)].nlargest(20, 'imdb_rating')[['title', 'genres', 'year']].copy()
+            popular_movies['user_similarity'] = 0.5
+            return popular_movies
         
         #Weighted average
         movie_score = {}
@@ -186,7 +233,7 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
             numerator = 0
             denominator = 0
             for sim_user in similar_users.index:
-                if pd.notnull(movie_rating[sim_user]):
+                if sim_user in movie_rating.index and pd.notnull(movie_rating[sim_user]):
                     weighted_score = similar_users[sim_user] * movie_rating[sim_user]
                     numerator += weighted_score
                     denominator += similar_users[sim_user]
@@ -194,7 +241,10 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
                 movie_score[movie] = numerator / denominator
         
         if not movie_score:
-            return pd.DataFrame(columns=['title', 'genres', 'year', 'user_similarity'])
+            watched_movies = target_user_movies.columns.tolist()
+            popular_movies = df_content[~df_content['title'].isin(watched_movies)].nlargest(20, 'imdb_rating')[['title', 'genres', 'year']].copy()
+            popular_movies['user_similarity'] = 0.5
+            return popular_movies
         
         movie_score_df = pd.DataFrame(movie_score.items(), columns=['title', 'user_similarity'])
         
@@ -205,29 +255,66 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
             movie_score_df['user_similarity'] = 0.5
         
         user_rec = pd.merge(df_content[['title', 'genres', 'year']], movie_score_df[['title', 'user_similarity']], how='inner')
+        
+        if user_rec.empty:
+            popular_movies = df_content.nlargest(20, 'imdb_rating')[['title', 'genres', 'year']].copy()
+            popular_movies['user_similarity'] = 0.5
+            return popular_movies
+            
         return user_rec.sort_values(by=['user_similarity', 'year'], ascending=False)
 
     def hybrid_recommender(user):
+        # Always get both content and user-based recommendations
         content_df = get_content_similar_movies(user)
         user_df = get_user_similar_movies(user, 0.1)
         
-        if content_df.empty or user_df.empty:
-            st.warning("Not enough data to generate hybrid recommendations. Please rate more movies.")
-            return pd.DataFrame()
+        # If both are empty (shouldn't happen with fallbacks), return popular movies
+        if content_df.empty and user_df.empty:
+            popular_movies = df_content.nlargest(10, 'imdb_rating')[['title', 'genres', 'imdb_rating']].copy()
+            popular_movies['Similarity Score'] = 0.5
+            popular_movies.rename(columns={'title': 'Movie Title', 'imdb_rating': 'IMDb Rating'}, inplace=True)
+            popular_movies.insert(0, 'Rank', range(1, len(popular_movies) + 1))
+            return popular_movies
         
-        content_user_scores = pd.merge(content_df, user_df, on=['title', 'genres'])
+        # If one is empty, use the other
+        if content_df.empty:
+            user_df['similarity_score'] = user_df['user_similarity']
+            top_scores = user_df.sort_values(by='similarity_score', ascending=False)[:10]
+        elif user_df.empty:
+            content_df['similarity_score'] = content_df['content_similarity']
+            top_scores = content_df.sort_values(by='similarity_score', ascending=False)[:10]
+        else:
+            # Merge both recommendation sources
+            try:
+                content_user_scores = pd.merge(content_df, user_df, on=['title', 'genres'])
+                
+                if content_user_scores.empty:
+                    # If no common movies, combine both lists
+                    content_df['similarity_score'] = content_df['content_similarity']
+                    user_df['similarity_score'] = user_df['user_similarity']
+                    combined = pd.concat([content_df[['title', 'genres', 'similarity_score']], 
+                                         user_df[['title', 'genres', 'similarity_score']]], 
+                                         ignore_index=True)
+                    combined = combined.drop_duplicates(subset=['title'])
+                    top_scores = combined.sort_values(by='similarity_score', ascending=False)[:10]
+                else:
+                    # Both scores are normalized to [0,1] before averaging
+                    content_user_scores['similarity_score'] = (content_user_scores['content_similarity'] + content_user_scores['user_similarity']) / 2
+                    top_scores = content_user_scores.sort_values(by='similarity_score', ascending=False)[:10]
+            except Exception as e:
+                # Fallback to content-based only
+                content_df['similarity_score'] = content_df['content_similarity']
+                top_scores = content_df.sort_values(by='similarity_score', ascending=False)[:10]
         
-        if content_user_scores.empty:
-            st.warning("No common movies found between content and collaborative filtering.")
-            return pd.DataFrame()
+        # Merge with movie details
+        recommendations = pd.merge(df_content[['title', 'genres', 'imdb_rating']], 
+                                   top_scores[['title', 'similarity_score']], 
+                                   on='title')
         
-        # Both scores are normalized to [0,1] before averaging
-        content_user_scores['similarity_score'] = (content_user_scores['content_similarity'] + content_user_scores['user_similarity']) / 2
+        recommendations.rename(columns={'title': 'Movie Title', 
+                                        'imdb_rating': 'IMDb Rating', 
+                                        'similarity_score': 'Similarity Score'}, inplace=True)
         
-        top_scores = content_user_scores.sort_values(by='similarity_score', ascending=False)[:10]
-        
-        recommendations = pd.merge(df_content[['title', 'genres', 'imdb_rating']], top_scores[['title', 'similarity_score']], on='title')
-        recommendations.rename(columns={'title': 'Movie Title', 'imdb_rating': 'IMDb Rating', 'similarity_score': 'Similarity Score'}, inplace=True)
         recommendations = recommendations.sort_values(by='Similarity Score', ascending=False).reset_index(drop=True)
         recommendations.insert(0, 'Rank', range(1, len(recommendations) + 1))
         
@@ -235,8 +322,7 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
     
     # Display recommendations
     recommendations_df = hybrid_recommender(st.session_state.new_userId)
-    if not recommendations_df.empty:
-        st.table(recommendations_df)
+    st.table(recommendations_df)
     
     # Add button to get new recommendations with different movies
     if st.button('Start Over with New Ratings'):
