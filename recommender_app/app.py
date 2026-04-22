@@ -34,8 +34,8 @@ if 'new_userId' not in st.session_state:
     st.session_state.new_userId = None
 if 'df_user_original' not in st.session_state:
     # Load original data only once
-    df_content = pd.read_csv('clean_content.csv')
-    df_user = pd.read_csv('ratings_title.csv')
+    df_content = pd.read_csv('movies_cleaned.csv')
+    df_user = pd.read_csv('df_cleaned.csv')
     df_user.rename(columns={'userId':'user_id', 'movieId':'movie_id'}, inplace=True)
     st.session_state.df_content = df_content
     st.session_state.df_user_original = df_user.copy()
