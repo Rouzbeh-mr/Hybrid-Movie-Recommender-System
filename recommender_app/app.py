@@ -89,14 +89,35 @@ if not st.session_state.recommendations_shown:
     st.markdown("Tell us what you think about these movies to get personalized recommendations:")
     
     new_user_data = []
-    number = int(st.number_input('How many movies would you like to rate?', min_value=3, value=3, step=1))
+    
+    # Initialize number of movies in session state if not exists
+    if 'num_movies' not in st.session_state:
+        st.session_state.num_movies = 3
+    
+    number = int(st.number_input('How many movies would you like to rate?', 
+                                  min_value=3, value=st.session_state.num_movies, step=1))
+    
+    # Update session state if number changed
+    if number != st.session_state.num_movies:
+        st.session_state.num_movies = number
+        # Adjust user_ratings list size
+        if 'user_ratings' in st.session_state:
+            current_len = len(st.session_state.user_ratings)
+            if number > current_len:
+                # Add empty slots
+                for i in range(current_len, number):
+                    st.session_state.user_ratings.append(("", 3.0))
+            elif number < current_len:
+                # Truncate
+                st.session_state.user_ratings = st.session_state.user_ratings[:number]
+        st.rerun()
     
     # Get all movie titles for selection
     options = df_content['title'].values.tolist()
     
     # Store ratings in session state
     if 'user_ratings' not in st.session_state:
-        st.session_state.user_ratings = []
+        st.session_state.user_ratings = [("", 3.0) for _ in range(number)]
     
     st.info("💡 **Tip:** You can type directly in the dropdown box to search for movies!")
     
@@ -106,24 +127,33 @@ if not st.session_state.recommendations_shown:
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            # Method 1: Use selectbox with search capability (Streamlit 1.24+)
-            # This automatically makes the dropdown searchable
+            # Check if we have a previous value
+            previous_movie = st.session_state.user_ratings[i][0] if i < len(st.session_state.user_ratings) else ""
+            
+            # Use selectbox with search capability
+            if previous_movie and previous_movie in options:
+                index = options.index(previous_movie)
+            else:
+                index = 0
+                
             movie = st.selectbox(
                 'Movie title',
                 key=f"movie_{i}",
                 options=options,
+                index=index,
                 help="Start typing to search for a movie"
             )
             
         with col2:
+            previous_rating = st.session_state.user_ratings[i][1] if i < len(st.session_state.user_ratings) else 3.0
             rating = st.select_slider(
                 'Rating',
                 options=[0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5],
                 key=f"rating_{i}",
-                value=3.0
+                value=previous_rating
             )
         
-        # Store temporarily
+        # Store in session state
         if len(st.session_state.user_ratings) <= i:
             st.session_state.user_ratings.append((movie, rating))
         else:
@@ -136,32 +166,41 @@ if not st.session_state.recommendations_shown:
         get_rec_button = st.button('🎯 Get Recommendations', use_container_width=True)
     
     if get_rec_button:
-        # Use stored ratings
-        new_user_data = st.session_state.user_ratings
+        # Validate all movies are selected
+        valid_ratings = True
+        for movie, rating in st.session_state.user_ratings:
+            if not movie or movie == "":
+                valid_ratings = False
+                st.error("Please select a movie for all entries before getting recommendations.")
+                break
         
-        #Add new_user_data to user database
-        new_userId = st.session_state.df_user_original['user_id'].sort_values().values[-1] + 1
-        st.session_state.new_userId = new_userId
-        
-        new_user = []
-        for movie, rating in new_user_data:
-            new_ratings = {}
-            new_ratings['user_id'] = new_userId
-            new_ratings['rating'] = rating
-            new_ratings['movie_id'] = df_content.loc[df_content['title'] == movie, 'movie_id'].values[0]
-            new_ratings['title'] = movie
-            new_ratings['genres'] = df_content.loc[df_content['title'] == movie, 'genres'].values[0]
-            new_ratings['year'] = df_content[df_content['title'] == movie]['year'].values[0]
-            new_user.append(new_ratings)
-
-        df_new_user = pd.DataFrame(new_user).drop_duplicates()
-
-        #Add the new user to the df_user dataframe
-        st.session_state.df_user_current = pd.concat([st.session_state.df_user_original, df_new_user])
-        df_user = st.session_state.df_user_current
-        
-        st.session_state.recommendations_shown = True
-        st.rerun()
+        if valid_ratings:
+            # Use stored ratings
+            new_user_data = st.session_state.user_ratings
+            
+            #Add new_user_data to user database
+            new_userId = st.session_state.df_user_original['user_id'].sort_values().values[-1] + 1
+            st.session_state.new_userId = new_userId
+            
+            new_user = []
+            for movie, rating in new_user_data:
+                new_ratings = {}
+                new_ratings['user_id'] = new_userId
+                new_ratings['rating'] = rating
+                new_ratings['movie_id'] = df_content.loc[df_content['title'] == movie, 'movie_id'].values[0]
+                new_ratings['title'] = movie
+                new_ratings['genres'] = df_content.loc[df_content['title'] == movie, 'genres'].values[0]
+                new_ratings['year'] = df_content[df_content['title'] == movie]['year'].values[0]
+                new_user.append(new_ratings)
+    
+            df_new_user = pd.DataFrame(new_user).drop_duplicates()
+    
+            #Add the new user to the df_user dataframe
+            st.session_state.df_user_current = pd.concat([st.session_state.df_user_original, df_new_user])
+            df_user = st.session_state.df_user_current
+            
+            st.session_state.recommendations_shown = True
+            st.rerun()
 
 # Show recommendations if button was clicked
 if st.session_state.recommendations_shown and st.session_state.new_userId is not None:
@@ -409,9 +448,9 @@ if st.session_state.recommendations_shown and st.session_state.new_userId is not
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button('🔄 Start Over with New Ratings', use_container_width=True):
-            # Clear session state to reset
-            for key in ['recommendations_shown', 'new_userId', 'user_ratings']:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.session_state.df_user_current = st.session_state.df_user_original.copy()
+            # Reset recommendations but KEEP the ratings
+            st.session_state.recommendations_shown = False
+            # Keep the new_userId and user_ratings for editing
+            # Don't delete them - this allows users to modify and try again
+            # Only reset the recommendation flag
             st.rerun()
